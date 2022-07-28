@@ -37,6 +37,7 @@ export class QueryEditor extends PureComponent<Props> {
 
   render() {
     const query = defaults(this.props.query, defaultQuery);
+    const { onRunQuery } = this.props;
     const { parameters, withStreaming } = query;
 
     return (
@@ -46,6 +47,7 @@ export class QueryEditor extends PureComponent<Props> {
             name="metrics"
             className="gf-form-input"
             onChange={e => this.onParameterValueChange(e, "metrics")}
+            onBlur={onRunQuery}
             value={parameters["metrics"] ?? ""}
         />
         <Switch checked={withStreaming || false} label="Enable streaming (v8+)" onChange={this.onWithStreamingChange} />

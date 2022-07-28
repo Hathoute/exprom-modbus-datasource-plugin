@@ -12,6 +12,7 @@ func GetBytesToDoubleParser(format string, order string) func([]byte) float64 {
 		i := 1
 		for i < len(bytes) {
 			bytes[i], bytes[i-1] = bytes[i-1], bytes[i]
+			i += 2
 		}
 	}
 
@@ -19,19 +20,12 @@ func GetBytesToDoubleParser(format string, order string) func([]byte) float64 {
 	isFlipped := false
 
 	switch order {
-	case "AB":
-	case "ABCD":
-	case "BADC":
-	case "ABCDEFGH":
-	case "BADCFEHG":
+	case "AB", "ABCD", "BADC", "ABCDEFGH", "BADCFEHG":
 		isBigEndian = true
 	}
 
 	switch order {
-	case "BADC":
-	case "CDAB":
-	case "BADCFEHG":
-	case "GHEFCDAB":
+	case "BADC", "CDAB", "BADCFEHG", "GHEFCDAB":
 		isFlipped = true
 	}
 

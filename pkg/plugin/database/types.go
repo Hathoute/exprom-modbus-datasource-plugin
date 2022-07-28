@@ -11,6 +11,7 @@ type Device struct {
 type Metric struct {
 	Id            int64
 	DeviceId      int64
+	DeviceName    string
 	Name          string
 	SlaveId       int32
 	FunctionCode  int32
@@ -27,4 +28,16 @@ type MetricData struct {
 	Timestamp time.Time
 
 	NumValue float64
+}
+
+type MetricWithData struct {
+	Metric Metric
+	Data   []*MetricData
+
+	parser func([]byte) float64
+}
+
+type DeviceWithMetrics struct {
+	Device  Device
+	Metrics []*MetricWithData
 }

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"github.com/grafana/grafana-starter-datasource-backend/pkg/plugin/database"
 	"github.com/grafana/grafana-starter-datasource-backend/pkg/plugin/helper"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -169,7 +171,7 @@ func (d *SampleDatasource) handleMetricsQuery(pCtx backend.PluginContext, query 
 
 	for i, metric := range metrics {
 		ids[i] = metric.Id
-		names[i] = metric.Name
+		names[i] = metric.DeviceName + " - " + metric.Name
 		deviceIds[i] = metric.DeviceId
 		slaveIds[i] = metric.SlaveId
 		fcs[i] = metric.FunctionCode
@@ -208,37 +210,30 @@ func (d *SampleDatasource) handleMetricsDataQuery(pCtx backend.PluginContext, qu
 		metricIdsCsv = &metrics
 	}
 
-	mdata, err := database.QueryMetricsData(metricIdsCsv, query.TimeRange)
+	log.DefaultLogger.Info("METRICDATA time", "f", query.TimeRange.From.String())
+
+	devices, err := database.QueryMetricsData(metricIdsCsv, query.TimeRange)
 	if err != nil {
 		response.Error = err
 		return response
 	}
 
-	// build fields.
-	ids := make([]int64, len(mdata))
-	metrics := make([]int64, len(mdata))
-	values := make([]float64, len(mdata))
-	timestamps := make([]time.Time, len(mdata))
+	for _, device := range devices {
+		for _, metric := range device.Metrics {
+			frame := metricToFrame(&device.Device, metric)
 
-	for i, d := range mdata {
-		ids[i] = d.Id
-		metrics[i] = d.MetricId
-		values[i] = d.NumValue
-		timestamps[i] = d.Timestamp
+			if qm.WithStreaming {
+				channel := live.Channel{
+					Scope:     live.ScopeDatasource,
+					Namespace: pCtx.DataSourceInstanceSettings.UID,
+					Path:      "stream/metric/" + strconv.FormatInt(metric.Metric.Id, 10),
+				}
+				frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
+			}
+
+			response.Frames = append(response.Frames, frame)
+		}
 	}
-
-	frame := data.NewFrame("response")
-
-	// add fields.
-	frame.Fields = append(frame.Fields,
-		data.NewField("id", nil, ids),
-		data.NewField("metric_id", nil, metrics),
-		data.NewField("value", nil, values),
-		data.NewField("timestamp", nil, timestamps),
-	)
-
-	// add the frames to the response.
-	response.Frames = append(response.Frames, frame)
 
 	return response
 }
@@ -314,10 +309,16 @@ func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.Subsc
 	log.DefaultLogger.Info("SubscribeStream called", "request", req)
 
 	status := backend.SubscribeStreamStatusPermissionDenied
-	if req.Path == "stream" {
-		// Allow subscribing only on expected path.
-		status = backend.SubscribeStreamStatusOK
+	path := strings.Split(req.Path, "/")
+	if len(path) == 3 && path[0] == "stream" {
+		switch path[1] {
+		case "metric":
+			status = backend.SubscribeStreamStatusOK
+		default:
+			status = backend.SubscribeStreamStatusNotFound
+		}
 	}
+
 	return &backend.SubscribeStreamResponse{
 		Status: status,
 	}, nil
@@ -328,16 +329,9 @@ func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.Subsc
 func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
 
-	// Create the same data frame as for query data.
-	frame := data.NewFrame("response")
-
-	// Add fields (matching the same schema used in QueryData).
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, make([]time.Time, 1)),
-		data.NewField("values", nil, make([]int64, 1)),
-	)
-
-	counter := 0
+	path := strings.Split(req.Path, "/")
+	metricId := path[2]
+	lastFetch := time.Now()
 
 	// Stream data frames periodically till stream closed by Grafana.
 	for {
@@ -345,18 +339,32 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 		case <-ctx.Done():
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
-		case <-time.After(time.Second):
-			// Send new data periodically.
-			frame.Fields[0].Set(0, time.Now())
-			frame.Fields[1].Set(0, int64(10*(counter%2+1)))
+		case <-time.After(5 * time.Second):
+			preFetch := time.Now()
+			devices, err := database.QueryMetricsData(&metricId, backend.TimeRange{
+				From: lastFetch,
+				To:   preFetch.Add(time.Minute),
+			})
 
-			counter++
-
-			err := sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {
 				log.DefaultLogger.Error("Error sending frame", "error", err)
 				continue
 			}
+
+			var frame *data.Frame
+			for _, device := range devices {
+				for _, metric := range device.Metrics {
+					frame = metricToFrame(&device.Device, metric)
+				}
+			}
+
+			err = sender.SendFrame(frame, data.IncludeAll)
+			if err != nil {
+				log.DefaultLogger.Error("Error sending frame", "error", err)
+				continue
+			}
+
+			lastFetch = preFetch
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-starter-datasource-backend/pkg/plugin/parser"
 	"strconv"
+	"time"
 )
 
 var database *sql.DB = nil
@@ -52,6 +53,7 @@ func TestConnection(cred *Credentials) (result *TestResult) {
 		Addr:                 cred.Hostname,
 		DBName:               cred.Database,
 		AllowNativePasswords: true,
+		ParseTime:            true,
 	}
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
@@ -115,9 +117,9 @@ func QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 		return nil, errors.New("not connected to any database")
 	}
 
-	query := "SELECT id, device_id, slave_id, function_code," +
-		" register_start, data_format, byte_order, refresh_rate, name " +
-		"FROM metrics"
+	query := "SELECT m.id, m.device_id, m.slave_id, m.function_code," +
+		" m.register_start, m.data_format, m.byte_order, m.refresh_rate, m.name, d.name" +
+		" FROM metrics m JOIN devices d on m.device_id = d.id"
 	if deviceIdsCsv != nil {
 		query += " WHERE device_id in (" + *deviceIdsCsv + ")"
 	}
@@ -140,7 +142,8 @@ func QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 			&metric.DataFormat,
 			&metric.ByteOrder,
 			&metric.RefreshRate,
-			&metric.Name)
+			&metric.Name,
+			&metric.DeviceName)
 
 		if err != nil {
 			log.DefaultLogger.Error("QueryMetrics", err)
@@ -152,40 +155,59 @@ func QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 	return metrics, nil
 }
 
-func QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]MetricData, error) {
+func QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]DeviceWithMetrics, error) {
 	log.DefaultLogger.Info("QueryMetricsData called")
+
 	if !IsConnected() {
 		return nil, errors.New("not connected to any database")
 	}
 
 	// Query metrics
-	query := "SELECT id, data_format, byte_order FROM metrics"
+	query := "select d.id, d.name, m.id, m.name, m.data_format, m.byte_order from metrics m" +
+		" join devices d on m.device_id = d.id"
 	if metricIdsCsv != nil {
-		query += " WHERE id in (" + *metricIdsCsv + ")"
+		query += " WHERE m.id in (" + *metricIdsCsv + ")"
 	}
 	res, err := database.Query(query)
 	if err != nil {
 		log.DefaultLogger.Error("QueryMetricsData", err)
 		return nil, err
 	}
-	var parsers map[int64]func([]byte) float64
+
+	metrics := make(map[int64]*MetricWithData)
+	devices := make(map[int64]*DeviceWithMetrics)
 	for res.Next() {
 		var metric Metric
-		err := res.Scan(&metric.Id, &metric.DataFormat, &metric.ByteOrder)
+		var device Device
+		err := res.Scan(&device.Id, &device.Name, &metric.Id, &metric.Name, &metric.DataFormat, &metric.ByteOrder)
 		if err != nil {
 			return nil, err
 		}
 
-		parsers[metric.Id] = parser.GetBytesToDoubleParser(metric.DataFormat, metric.ByteOrder)
+		parser := parser.GetBytesToDoubleParser(metric.DataFormat, metric.ByteOrder)
+		metrics[metric.Id] = &MetricWithData{
+			Metric: metric,
+			Data:   make([]*MetricData, 0),
+			parser: parser,
+		}
+
+		if _, in := devices[device.Id]; !in {
+			devices[device.Id] = &DeviceWithMetrics{
+				Device:  device,
+				Metrics: make([]*MetricWithData, 0),
+			}
+		}
+		devices[device.Id].Metrics = append(devices[device.Id].Metrics, metrics[metric.Id])
 	}
 
-	query = "SELECT id, metric_id, value, timestamp FROM metrics_data"
-	query += " WHERE timestamp > " + strconv.FormatInt(timerange.From.Unix(), 10) +
-		" AND timestamp < " + strconv.FormatInt(timerange.To.Unix(), 10)
+	query = "SELECT id, metric_id, value, UNIX_TIMESTAMP(timestamp) FROM metrics_data"
+	query += " WHERE UNIX_TIMESTAMP(timestamp) > " + strconv.FormatInt(timerange.From.Unix(), 10) +
+		" AND UNIX_TIMESTAMP(timestamp) < " + strconv.FormatInt(timerange.To.Unix(), 10)
 	if metricIdsCsv != nil {
 		query += " AND metric_id in (" + *metricIdsCsv + ")"
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp ASC"
+	log.DefaultLogger.Info("QUERY " + query)
 	res.Close()
 	res, err = database.Query(query)
 	defer res.Close()
@@ -195,18 +217,25 @@ func QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]Metr
 		return nil, err
 	}
 
-	data := make([]MetricData, 0)
 	for res.Next() {
 		var d MetricData
-		err := res.Scan(&d.Id, &d.MetricId, &d.Value, &d.Timestamp)
+		var timestamp int64
+		err := res.Scan(&d.Id, &d.MetricId, &d.Value, &timestamp)
+		d.Timestamp = time.Unix(timestamp, 0)
 
 		if err != nil {
 			log.DefaultLogger.Error("QueryMetricsData", err)
 			return nil, err
 		}
-		d.NumValue = parsers[d.Id](d.Value)
-		data = append(data, d)
+		mwd := metrics[d.MetricId]
+		d.NumValue = mwd.parser(d.Value)
+		mwd.Data = append(mwd.Data, &d)
 	}
 
+	// extract Metrics from map
+	data := make([]DeviceWithMetrics, 0, len(devices))
+	for _, d := range devices {
+		data = append(data, *d)
+	}
 	return data, nil
 }

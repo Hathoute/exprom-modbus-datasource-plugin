@@ -38,6 +38,10 @@ export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptio
                 target.parameters.metrics = getTemplateSrv()
                     .replace(target.parameters.metrics, undefined, 'csv')
             }
+            if(target.parameters.devices) {
+                target.parameters.devices = getTemplateSrv()
+                    .replace(target.parameters.devices, undefined, 'csv')
+            }
         }
 
         return super.query(request);
