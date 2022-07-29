@@ -1,14 +1,8 @@
-# Grafana Data Source Backend Plugin Template
+# Grafana Plugin For Modbus Monitoring
 
-[![Build](https://github.com/grafana/grafana-starter-datasource-backend/workflows/CI/badge.svg)](https://github.com/grafana/grafana-datasource-backend/actions?query=workflow%3A%22CI%22)
+A <b>data-source backend plugin</b> that is used alongside [exprom-modbus-server](https://github.com/Hathoute/exprom-modbus-server) to display real-time metrics or old data. 
 
-This template is a starting point for building Grafana Data Source Backend Plugins
-
-## What is Grafana Data Source Backend Plugin?
-
-Grafana supports a wide range of data sources, including Prometheus, MySQL, and even Datadog. There’s a good chance you can already visualize metrics from the systems you have set up. In some cases, though, you already have an in-house metrics solution that you’d like to add to your Grafana dashboards. Grafana Data Source Plugins enables integrating such solutions with Grafana.
-
-For more information about backend plugins, refer to the documentation on [Backend plugins](https://grafana.com/docs/grafana/latest/developers/plugins/backend/).
+Using [Go](https://go.dev/) for backend and [ReactJS](https://fr.reactjs.org/) for frontend.
 
 ## Getting started
 
@@ -52,7 +46,7 @@ A data source backend plugin consists of both frontend and backend components.
 2. Build backend plugin binaries for Linux, Windows and Darwin:
 
    ```bash
-   mage -v
+   mage -v     # "go run mage.go -v" if you don't want to depend on mage
    ```
 
 3. List all available Mage targets for additional commands:
@@ -60,6 +54,10 @@ A data source backend plugin consists of both frontend and backend components.
    ```bash
    mage -l
    ```
+
+## License
+
+This project is licensed under [Apache License 2.0](LICENSE) - see the [LICENSE](LICENSE) file for details
 
 ## Learn more
 
