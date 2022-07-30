@@ -1,6 +1,14 @@
 package database
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
+
+type Database struct {
+	db   *sql.DB
+	open bool
+}
 
 type Device struct {
 	Id       int64

@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-var database *sql.DB = nil
-
 type Credentials struct {
 	Hostname string
 	User     string
@@ -26,26 +24,7 @@ type TestResult struct {
 	Message string
 }
 
-func IsConnected() bool {
-	return database != nil
-}
-
-func TestConnection(cred *Credentials) (result *TestResult) {
-	log.DefaultLogger.Info("TestConnection called")
-	defer func() {
-		if r := recover(); r != nil {
-			result = new(TestResult)
-			result.Success = false
-			result.Message = "Database error"
-		}
-	}()
-
-	// Invalidate current database pool
-	if database != nil {
-		database.Close()
-		database = nil
-	}
-
+func Connect(cred *Credentials) (*Database, error) {
 	cfg := mysql.Config{
 		User:                 cred.User,
 		Passwd:               cred.Password,
@@ -58,14 +37,41 @@ func TestConnection(cred *Credentials) (result *TestResult) {
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
-		return &TestResult{
-			Success: false,
-			Message: err.Error(),
-		}
+		return nil, err
 	}
 
+	return &Database{
+		db:   db,
+		open: true,
+	}, nil
+}
+
+func (db *Database) IsConnected() bool {
+	return db != nil && db.open
+}
+
+func (db *Database) Close() error {
+	err := db.db.Close()
+	if err != nil {
+		return err
+	}
+
+	db.open = false
+	return nil
+}
+
+func (db *Database) TestConnection() (result *TestResult) {
+	log.DefaultLogger.Info("TestConnection called")
+	defer func() {
+		if r := recover(); r != nil {
+			result = new(TestResult)
+			result.Success = false
+			result.Message = "Database error"
+		}
+	}()
+
 	var version string
-	err = db.QueryRow("SELECT VERSION()").Scan(&version)
+	err := db.db.QueryRow("SELECT VERSION()").Scan(&version)
 
 	if err != nil {
 		db.Close()
@@ -75,19 +81,18 @@ func TestConnection(cred *Credentials) (result *TestResult) {
 		}
 	}
 
-	database = db
 	return &TestResult{
 		Success: true,
 		Message: "OK: " + version,
 	}
 }
 
-func QueryDevices() ([]Device, error) {
+func (db *Database) QueryDevices() ([]Device, error) {
 	log.DefaultLogger.Info("QueryDevices called")
-	if !IsConnected() {
+	if !db.IsConnected() {
 		return nil, errors.New("not connected to any database")
 	}
-	res, err := database.Query("SELECT id, serial_id, name FROM devices")
+	res, err := db.db.Query("SELECT id, serial_id, name FROM devices")
 	defer res.Close()
 
 	if err != nil {
@@ -111,9 +116,9 @@ func QueryDevices() ([]Device, error) {
 	return devices, nil
 }
 
-func QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
+func (db *Database) QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 	log.DefaultLogger.Info("QueryMetrics called")
-	if !IsConnected() {
+	if !db.IsConnected() {
 		return nil, errors.New("not connected to any database")
 	}
 
@@ -123,7 +128,7 @@ func QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 	if deviceIdsCsv != nil {
 		query += " WHERE device_id in (" + *deviceIdsCsv + ")"
 	}
-	res, err := database.Query(query)
+	res, err := db.db.Query(query)
 	defer res.Close()
 
 	if err != nil {
@@ -155,10 +160,10 @@ func QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 	return metrics, nil
 }
 
-func QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]DeviceWithMetrics, error) {
+func (db *Database) QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]DeviceWithMetrics, error) {
 	log.DefaultLogger.Info("QueryMetricsData called")
 
-	if !IsConnected() {
+	if !db.IsConnected() {
 		return nil, errors.New("not connected to any database")
 	}
 
@@ -168,7 +173,7 @@ func QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]Devi
 	if metricIdsCsv != nil {
 		query += " WHERE m.id in (" + *metricIdsCsv + ")"
 	}
-	res, err := database.Query(query)
+	res, err := db.db.Query(query)
 	if err != nil {
 		log.DefaultLogger.Error("QueryMetricsData", err)
 		return nil, err
@@ -209,7 +214,7 @@ func QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]Devi
 	query += " ORDER BY timestamp ASC"
 	log.DefaultLogger.Info("QUERY " + query)
 	res.Close()
-	res, err = database.Query(query)
+	res, err = db.db.Query(query)
 	defer res.Close()
 
 	if err != nil {

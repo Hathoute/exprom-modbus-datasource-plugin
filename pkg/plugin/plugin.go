@@ -34,19 +34,32 @@ var (
 )
 
 // NewSampleDatasource creates a new datasource instance.
-func NewSampleDatasource(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	return &SampleDatasource{}, nil
+func NewSampleDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	credentials, err := helper.GetCredentials(&settings)
+	if err != nil {
+		return nil, err
+	}
+	db, err := database.Connect(credentials)
+	if err != nil {
+		return nil, errors.New("cannot connect to database: " + err.Error())
+	}
+
+	return &SampleDatasource{
+		database: db,
+	}, nil
 }
 
 // SampleDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
-type SampleDatasource struct{}
+type SampleDatasource struct {
+	database *database.Database
+}
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
 // created. As soon as datasource settings change detected by SDK old datasource instance will
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *SampleDatasource) Dispose() {
-	// Clean up datasource instance resources.
+	d.database.Close()
 }
 
 // QueryData handles multiple queries and returns multiple responses.
@@ -55,18 +68,6 @@ func (d *SampleDatasource) Dispose() {
 // contains Frames ([]*Frame).
 func (d *SampleDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	log.DefaultLogger.Info("QueryData called", "request", req)
-
-	// check connection to the database
-	if !database.IsConnected() {
-		credentials, err := helper.GetCredentials(req.PluginContext.DataSourceInstanceSettings)
-		if err != nil {
-			return nil, err
-		}
-		result := database.TestConnection(credentials)
-		if !result.Success {
-			return nil, errors.New("cannot connect to database: " + result.Message)
-		}
-	}
 
 	// create response struct
 	response := backend.NewQueryDataResponse()
@@ -109,7 +110,7 @@ func (d *SampleDatasource) QueryData(ctx context.Context, req *backend.QueryData
 func (d *SampleDatasource) handleDevicesQuery(pCtx backend.PluginContext, query backend.DataQuery, qm queryModel) *backend.DataResponse {
 	response := &backend.DataResponse{}
 
-	devices, err := database.QueryDevices()
+	devices, err := d.database.QueryDevices()
 	if err != nil {
 		response.Error = err
 		return response
@@ -153,7 +154,7 @@ func (d *SampleDatasource) handleMetricsQuery(pCtx backend.PluginContext, query 
 		_ = &fields
 	}
 
-	metrics, err := database.QueryMetrics(deviceIdsCsv)
+	metrics, err := d.database.QueryMetrics(deviceIdsCsv)
 	if err != nil {
 		response.Error = err
 		return response
@@ -212,7 +213,7 @@ func (d *SampleDatasource) handleMetricsDataQuery(pCtx backend.PluginContext, qu
 
 	log.DefaultLogger.Info("METRICDATA time", "f", query.TimeRange.From.String())
 
-	devices, err := database.QueryMetricsData(metricIdsCsv, query.TimeRange)
+	devices, err := d.database.QueryMetricsData(metricIdsCsv, query.TimeRange)
 	if err != nil {
 		response.Error = err
 		return response
@@ -283,15 +284,7 @@ func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, 
 func (d *SampleDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (res *backend.CheckHealthResult, _ error) {
 	log.DefaultLogger.Info("CheckHealth called", "request", req)
 
-	credentials, err := helper.GetCredentials(req.PluginContext.DataSourceInstanceSettings)
-	if err != nil {
-		return &backend.CheckHealthResult{
-			Status:  backend.HealthStatusError,
-			Message: "Cannot extract credentials: " + err.Error(),
-		}, nil
-	}
-
-	result := database.TestConnection(credentials)
+	result := d.database.TestConnection()
 	var status = backend.HealthStatusOk
 	if !result.Success {
 		status = backend.HealthStatusError
@@ -341,7 +334,7 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 			return nil
 		case <-time.After(5 * time.Second):
 			preFetch := time.Now()
-			devices, err := database.QueryMetricsData(&metricId, backend.TimeRange{
+			devices, err := d.database.QueryMetricsData(&metricId, backend.TimeRange{
 				From: lastFetch,
 				To:   preFetch.Add(time.Minute),
 			})
