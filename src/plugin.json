@@ -4,6 +4,7 @@
   "name": "modbus-rtu-datasource",
   "id": "exprom-modbus-rtu-datasource",
   "metrics": true,
+  "alerting": true,
   "backend": true,
   "executable": "gpx_modbus-rtu-datasource",
   "info": {

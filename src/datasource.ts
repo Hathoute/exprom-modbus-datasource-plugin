@@ -1,4 +1,10 @@
-import {DataQueryRequest, DataQueryResponse, DataSourceInstanceSettings, MetricFindValue} from '@grafana/data';
+import {
+    DataQueryRequest,
+    DataQueryResponse,
+    DataSourceInstanceSettings,
+    MetricFindValue,
+    ScopedVars
+} from '@grafana/data';
 import {BackendDataSourceResponse, DataSourceWithBackend, getBackendSrv, getTemplateSrv} from '@grafana/runtime';
 import {MyDataSourceOptions, MyQuery, MyVariableQuery} from './types';
 import {Observable} from "rxjs";
@@ -6,6 +12,17 @@ import {Observable} from "rxjs";
 export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptions> {
     constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
         super(instanceSettings);
+    }
+
+
+    interpolateVariablesInQueries(queries: MyQuery[], scopedVars: ScopedVars | {}): MyQuery[] {
+        console.log("interpolateVariablesInQueries", queries, scopedVars)
+        return super.interpolateVariablesInQueries(queries, scopedVars);
+    }
+
+    applyTemplateVariables(query: MyQuery, scopedVars: ScopedVars): Record<string, any> {
+        console.log("applyTemplateVariables", query, scopedVars)
+        return super.applyTemplateVariables(query, scopedVars);
     }
 
     async metricFindQuery(query: MyVariableQuery, options?: any): Promise<MetricFindValue[]> {
@@ -33,6 +50,8 @@ export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptio
     }
 
     query(request: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
+        console.log("query", request);
+
         for (const target of request.targets) {
             if(target.parameters.metrics) {
                 target.parameters.metrics = getTemplateSrv()
@@ -69,7 +88,7 @@ export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptio
 
     _buildQuery(pq: Partial<MyQuery>): MyQuery {
         return {
-            entity: pq.entity ?? "Device",
+            entity: pq.entity ?? "Devices",
             parameters: pq.parameters ?? {},
             refId: pq.refId ?? "ref",
             withStreaming: pq.withStreaming ?? false

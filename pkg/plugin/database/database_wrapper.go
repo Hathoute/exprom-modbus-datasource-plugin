@@ -160,7 +160,7 @@ func (db *Database) QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 	return metrics, nil
 }
 
-func (db *Database) QueryMetricsData(metricIdsCsv *string, timerange backend.TimeRange) ([]DeviceWithMetrics, error) {
+func (db *Database) QueryMetricsData(filter *Filter, timerange backend.TimeRange) ([]DeviceWithMetrics, error) {
 	log.DefaultLogger.Info("QueryMetricsData called")
 
 	if !db.IsConnected() {
@@ -170,9 +170,12 @@ func (db *Database) QueryMetricsData(metricIdsCsv *string, timerange backend.Tim
 	// Query metrics
 	query := "select d.id, d.name, m.id, m.name, m.data_format, m.byte_order from metrics m" +
 		" join devices d on m.device_id = d.id"
-	if metricIdsCsv != nil {
-		query += " WHERE m.id in (" + *metricIdsCsv + ")"
+	if filter.Entity == "devices" {
+		query += " WHERE d.id in (" + filter.Value + ")"
+	} else if filter.Entity == "metrics" {
+		query += " WHERE m.id in (" + filter.Value + ")"
 	}
+
 	res, err := db.db.Query(query)
 	if err != nil {
 		log.DefaultLogger.Error("QueryMetricsData", err)
@@ -205,13 +208,17 @@ func (db *Database) QueryMetricsData(metricIdsCsv *string, timerange backend.Tim
 		devices[device.Id].Metrics = append(devices[device.Id].Metrics, metrics[metric.Id])
 	}
 
+	metricIds := ""
+	separator := ""
+	for _, metric := range metrics {
+		metricIds += separator + strconv.FormatInt(metric.Metric.Id, 10)
+		separator = ","
+	}
+
 	query = "SELECT id, metric_id, value, UNIX_TIMESTAMP(timestamp) FROM metrics_data"
 	query += " WHERE UNIX_TIMESTAMP(timestamp) > " + strconv.FormatInt(timerange.From.Unix(), 10) +
-		" AND UNIX_TIMESTAMP(timestamp) < " + strconv.FormatInt(timerange.To.Unix(), 10)
-	if metricIdsCsv != nil {
-		query += " AND metric_id in (" + *metricIdsCsv + ")"
-	}
-	query += " ORDER BY timestamp ASC"
+		" AND UNIX_TIMESTAMP(timestamp) < " + strconv.FormatInt(timerange.To.Unix(), 10) +
+		" AND metric_id in (" + metricIds + ") ORDER BY timestamp ASC"
 	log.DefaultLogger.Info("QUERY " + query)
 	res.Close()
 	res, err = db.db.Query(query)

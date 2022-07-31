@@ -1,7 +1,7 @@
 import {defaults} from 'lodash';
 
-import React, {ChangeEvent, PureComponent, SyntheticEvent} from 'react';
-import {LegacyForms} from '@grafana/ui';
+import React, {useEffect, useState} from 'react';
+import {LegacyForms, Select} from '@grafana/ui';
 import {QueryEditorProps, SelectableValue} from '@grafana/data';
 import {DataSource} from '../datasource';
 import {defaultQuery, MyDataSourceOptions, MyQuery} from '../types';
@@ -10,48 +10,101 @@ const { Switch } = LegacyForms;
 
 type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
 
-export class QueryEditor extends PureComponent<Props> {
-  onEntityChange = (value: SelectableValue<string>) => {
-    const { onChange, query } = this.props;
-    onChange({ ...query, entity: value.value! });
+export function QueryEditor(props: Props) {
+
+  const onChange = (query: MyQuery) => {
+      props.onChange(query);
+      props.onRunQuery();
+  }
+
+  const createInput = (label: string, name: string, value: any,
+                 onChange: (e: React.ChangeEvent<HTMLInputElement>) => void) => (
+      <>
+        <span className="gf-form-label width-10">{label}</span>
+        <input
+            name={name}
+            className="gf-form-input"
+            onChange={onChange}
+            onBlur={props.onRunQuery}
+            value={value}
+        />
+      </>
+  )
+
+  const createSelect = (label: string, options: SelectableValue[], value: any,
+                  onChange: (e: SelectableValue) => void) => (
+    <>
+      <span className="gf-form-label width-10">{label}</span>
+      <Select
+          options={options}
+          value={value}
+          onChange={onChange}
+          allowCustomValue={false}
+          closeMenuOnSelect={true}
+          isClearable={false}
+          isMulti={false}
+      />
+    </>
+  )
+
+  const toSelectableValue = (entity: string): SelectableValue<string> => {
+    return {
+      label: entity,
+      value: entity
+    }
   };
 
-  onParameterValueChange = (event: ChangeEvent<HTMLInputElement>, key: string) => {
-    const { onChange, query } = this.props;
-    query.entity = "MetricsData"
-    onChange({
+  const [query, setQuery] = useState<MyQuery>(defaults(props.query, defaultQuery));
+
+  useEffect(() => {
+      if(query.entity !== "MetricsData") {
+          setQuery({...query, entity: "MetricsData"})
+          return;   // onChange will get executed next time (dependency on query)
+      }
+      onChange(query)
+
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const setParam = (p: string, v: any) => {
+    setQuery({
       ...query,
       parameters: {
         ...query.parameters,
-        [key]: event.target.value
+        [p]: v
       }
     });
   }
 
-  onWithStreamingChange = (event: SyntheticEvent<HTMLInputElement>) => {
-    const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, withStreaming: event.currentTarget.checked });
-    // executes the query
-    onRunQuery();
-  };
+  return (
+      <div>
+        <div className="gf-form">
+          <span className="gf-form-label width-10">SELECT</span>
+          <span className="gf-form-label width-10">MetricsData</span>
+        </div>
 
-  render() {
-    const query = defaults(this.props.query, defaultQuery);
-    const { onRunQuery } = this.props;
-    const { parameters, withStreaming } = query;
+        <div className="gf-form">
+          {createSelect("WHERE",
+              ["devices", "metrics"].map(toSelectableValue),
+              query.parameters["filter"],
+              e => setParam("filter", e.value)
+          )}
+          {query.parameters.filter && createInput("IN",
+              "filter",
+              query.parameters[query.parameters.filter],
+              e => setParam(query.parameters.filter, e.target.value)
+          )
+          }
+        </div>
 
-    return (
-      <div className="gf-form">
-        <span className="gf-form-label width-10">Select data from metric(s)</span>
-        <input
-            name="metrics"
-            className="gf-form-input"
-            onChange={e => this.onParameterValueChange(e, "metrics")}
-            onBlur={onRunQuery}
-            value={parameters["metrics"] ?? ""}
-        />
-        <Switch checked={withStreaming || false} label="Enable streaming (v8+)" onChange={this.onWithStreamingChange} />
+        <div className="gf-form">
+          <Switch checked={query.withStreaming}
+                  label="Enable streaming (v8+)"
+                  onChange={e => setQuery({
+                      ...query,
+                      withStreaming: e.currentTarget.checked
+                  })} />
+        </div>
       </div>
     );
-  }
 }

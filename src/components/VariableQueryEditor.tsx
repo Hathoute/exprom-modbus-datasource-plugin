@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 
 import {Select} from '@grafana/ui';
 import {SelectableValue} from "@grafana/data";
@@ -13,15 +13,20 @@ export default function VariableQueryEditor ({ onChange, query }: VariableQueryP
     const [state, setState] = useState(query);
     const entities = ["Devices", "Metrics"];
 
+    const saveQuery = () => {
+        onChange(state, `${state.entity} (${state.devices ?? ''})`);
+    };
+
+    useEffect(() => {
+        saveQuery();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [state])
+
     const toSelectableValue = (entity: string): SelectableValue<string> => {
         return {
             label: entity,
             value: entity
         }
-    };
-
-    const saveQuery = () => {
-        onChange(state, `${state.entity} (${state.devices ?? ''})`);
     };
 
     return (

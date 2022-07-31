@@ -206,14 +206,15 @@ func (d *SampleDatasource) handleMetricsQuery(pCtx backend.PluginContext, query 
 func (d *SampleDatasource) handleMetricsDataQuery(pCtx backend.PluginContext, query backend.DataQuery, qm queryModel) *backend.DataResponse {
 	response := &backend.DataResponse{}
 
-	var metricIdsCsv *string
-	if metrics, ok := qm.Parameters["metrics"]; ok {
-		metricIdsCsv = &metrics
+	var filter database.Filter
+	if filterType, ok := qm.Parameters["filter"]; ok {
+		filter.Entity = filterType
+	}
+	if entities, ok := qm.Parameters[filter.Entity]; ok {
+		filter.Value = entities
 	}
 
-	log.DefaultLogger.Info("METRICDATA time", "f", query.TimeRange.From.String())
-
-	devices, err := d.database.QueryMetricsData(metricIdsCsv, query.TimeRange)
+	devices, err := d.database.QueryMetricsData(&filter, query.TimeRange)
 	if err != nil {
 		response.Error = err
 		return response
@@ -235,44 +236,6 @@ func (d *SampleDatasource) handleMetricsDataQuery(pCtx backend.PluginContext, qu
 			response.Frames = append(response.Frames, frame)
 		}
 	}
-
-	return response
-}
-
-func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
-	response := backend.DataResponse{}
-
-	// Unmarshal the JSON into our queryModel.
-	var qm queryModel
-
-	response.Error = json.Unmarshal(query.JSON, &qm)
-	if response.Error != nil {
-		return response
-	}
-
-	// create data frame response.
-	frame := data.NewFrame("response")
-
-	// add fields.
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{10, 20}),
-	)
-
-	// If query called with streaming on then return a channel
-	// to subscribe on a client-side and consume updates from a plugin.
-	// Feel free to remove this if you don't need streaming for your datasource.
-	if qm.WithStreaming {
-		channel := live.Channel{
-			Scope:     live.ScopeDatasource,
-			Namespace: pCtx.DataSourceInstanceSettings.UID,
-			Path:      "stream",
-		}
-		frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
-	}
-
-	// add the frames to the response.
-	response.Frames = append(response.Frames, frame)
 
 	return response
 }
@@ -326,6 +289,11 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 	metricId := path[2]
 	lastFetch := time.Now()
 
+	filter := &database.Filter{
+		Entity: "metrics",
+		Value:  metricId,
+	}
+
 	// Stream data frames periodically till stream closed by Grafana.
 	for {
 		select {
@@ -334,7 +302,7 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 			return nil
 		case <-time.After(5 * time.Second):
 			preFetch := time.Now()
-			devices, err := d.database.QueryMetricsData(&metricId, backend.TimeRange{
+			devices, err := d.database.QueryMetricsData(filter, backend.TimeRange{
 				From: lastFetch,
 				To:   preFetch.Add(time.Minute),
 			})

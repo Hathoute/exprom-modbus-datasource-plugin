@@ -10,6 +10,11 @@ type Database struct {
 	open bool
 }
 
+type Filter struct {
+	Entity string
+	Value  string
+}
+
 type Device struct {
 	Id       int64
 	Name     string
