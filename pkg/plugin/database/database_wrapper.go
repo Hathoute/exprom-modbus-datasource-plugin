@@ -240,7 +240,11 @@ func (db *Database) QueryMetricsData(filter *Filter, timerange backend.TimeRange
 			return nil, err
 		}
 		mwd := metrics[d.MetricId]
-		d.NumValue = mwd.parser(d.Value)
+		val, err := mwd.parser(d.Value)
+		if err != nil {
+			continue
+		}
+		d.NumValue = val
 		mwd.Data = append(mwd.Data, &d)
 	}
 

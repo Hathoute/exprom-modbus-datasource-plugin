@@ -47,7 +47,7 @@ type MetricWithData struct {
 	Metric Metric
 	Data   []*MetricData
 
-	parser func([]byte) float64
+	parser func([]byte) (float64, error)
 }
 
 type DeviceWithMetrics struct {

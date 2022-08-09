@@ -6,7 +6,7 @@ import (
 	"math"
 )
 
-func GetBytesToDoubleParser(format string, order string) func([]byte) float64 {
+func GetBytesToDoubleParser(format string, order string) func([]byte) (float64, error) {
 	flip := func(bytes []byte) {
 		// TODO: Any drawbacks in mutating this?
 		i := 1
@@ -29,12 +29,16 @@ func GetBytesToDoubleParser(format string, order string) func([]byte) float64 {
 		isFlipped = true
 	}
 
-	return func(bytes []byte) float64 {
-		var parser binary.ByteOrder
-		if isBigEndian {
-			parser = binary.BigEndian
-		} else {
-			parser = binary.LittleEndian
+	var parser binary.ByteOrder
+	if isBigEndian {
+		parser = binary.BigEndian
+	} else {
+		parser = binary.LittleEndian
+	}
+
+	return func(bytes []byte) (float64, error) {
+		if len(order) != len(bytes) {
+			return 0, errors.New("incompatible input bytes")
 		}
 
 		if isFlipped {
@@ -43,17 +47,17 @@ func GetBytesToDoubleParser(format string, order string) func([]byte) float64 {
 
 		switch format {
 		case "int16":
-			return float64(int16(parser.Uint16(bytes)))
+			return float64(int16(parser.Uint16(bytes))), nil
 		case "uint16":
-			return float64(parser.Uint16(bytes))
+			return float64(parser.Uint16(bytes)), nil
 		case "int32":
-			return float64(int32(parser.Uint32(bytes)))
+			return float64(int32(parser.Uint32(bytes))), nil
 		case "uint32":
-			return float64(parser.Uint32(bytes))
+			return float64(parser.Uint32(bytes)), nil
 		case "float32":
-			return float64(math.Float32frombits(parser.Uint32(bytes)))
+			return float64(math.Float32frombits(parser.Uint32(bytes))), nil
 		case "float64":
-			return math.Float64frombits(parser.Uint64(bytes))
+			return math.Float64frombits(parser.Uint64(bytes)), nil
 		default:
 			panic(errors.New("unknown format " + format))
 		}
