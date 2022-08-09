@@ -17,11 +17,16 @@ func metricToFrame(device *database.Device, metric *database.MetricWithData) *da
 		values[i] = d.NumValue
 	}
 
+	valueField := data.NewField("Value", data.Labels{"metric": metric.Metric.Name}, values)
+	timeField := data.NewField("Time", nil, times)
+
+	// Add field config (unit, ...)
+	valueField.Config = &data.FieldConfig{
+		Unit: metric.Metric.Unit,
+	}
+
 	// populate fields with metric values
-	frame.Fields = append(frame.Fields,
-		data.NewField("Value", data.Labels{"metric": metric.Metric.Name}, values),
-		data.NewField("Time", nil, times),
-	)
+	frame.Fields = append(frame.Fields, valueField, timeField)
 
 	return frame
 }

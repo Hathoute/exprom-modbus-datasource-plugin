@@ -32,6 +32,7 @@ type Metric struct {
 	DataFormat    string
 	ByteOrder     string
 	RefreshRate   int32
+	Unit          string
 }
 
 type MetricData struct {

@@ -123,7 +123,7 @@ func (db *Database) QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 	}
 
 	query := "SELECT m.id, m.device_id, m.slave_id, m.function_code," +
-		" m.register_start, m.data_format, m.byte_order, m.refresh_rate, m.name, d.name" +
+		" m.register_start, m.data_format, m.byte_order, m.refresh_rate, m.name, m.unit, d.name" +
 		" FROM metrics m JOIN devices d on m.device_id = d.id"
 	if deviceIdsCsv != nil {
 		query += " WHERE device_id in (" + *deviceIdsCsv + ")"
@@ -148,6 +148,7 @@ func (db *Database) QueryMetrics(deviceIdsCsv *string) ([]Metric, error) {
 			&metric.ByteOrder,
 			&metric.RefreshRate,
 			&metric.Name,
+			&metric.Unit,
 			&metric.DeviceName)
 
 		if err != nil {
@@ -168,7 +169,7 @@ func (db *Database) QueryMetricsData(filter *Filter, timerange backend.TimeRange
 	}
 
 	// Query metrics
-	query := "select d.id, d.name, m.id, m.name, m.data_format, m.byte_order from metrics m" +
+	query := "select d.id, d.name, m.id, m.name, m.data_format, m.byte_order, m.unit from metrics m" +
 		" join devices d on m.device_id = d.id"
 	if filter.Entity == "devices" {
 		query += " WHERE d.id in (" + filter.Value + ")"
@@ -187,7 +188,14 @@ func (db *Database) QueryMetricsData(filter *Filter, timerange backend.TimeRange
 	for res.Next() {
 		var metric Metric
 		var device Device
-		err := res.Scan(&device.Id, &device.Name, &metric.Id, &metric.Name, &metric.DataFormat, &metric.ByteOrder)
+		err := res.Scan(&device.Id,
+			&device.Name,
+			&metric.Id,
+			&metric.Name,
+			&metric.DataFormat,
+			&metric.ByteOrder,
+			&metric.Unit)
+
 		if err != nil {
 			return nil, err
 		}
