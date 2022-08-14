@@ -14,7 +14,7 @@ func metricToFrame(device *database.Device, metric *database.MetricWithData) *da
 
 	for i, d := range metric.Data {
 		times[i] = d.Timestamp
-		values[i] = d.NumValue
+		values[i] = d.Value
 	}
 
 	valueField := data.NewField("Value", data.Labels{"metric": metric.Metric.Name}, values)

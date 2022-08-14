@@ -6,6 +6,7 @@ import (
 	"math"
 )
 
+// Deprecated: The plugin does not need to parse data, as it is already saved as a double in the database.
 func GetBytesToDoubleParser(format string, order string) func([]byte) (float64, error) {
 	flip := func(bytes []byte) {
 		// TODO: Any drawbacks in mutating this?

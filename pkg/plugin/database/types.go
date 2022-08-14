@@ -38,17 +38,13 @@ type Metric struct {
 type MetricData struct {
 	Id        int64
 	MetricId  int64
-	Value     []byte
+	Value     float64
 	Timestamp time.Time
-
-	NumValue float64
 }
 
 type MetricWithData struct {
 	Metric Metric
 	Data   []*MetricData
-
-	parser func([]byte) (float64, error)
 }
 
 type DeviceWithMetrics struct {

@@ -7,7 +7,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/grafana/grafana-starter-datasource-backend/pkg/plugin/parser"
 	"strconv"
 	"time"
 )
@@ -200,11 +199,9 @@ func (db *Database) QueryMetricsData(filter *Filter, timerange backend.TimeRange
 			return nil, err
 		}
 
-		parser := parser.GetBytesToDoubleParser(metric.DataFormat, metric.ByteOrder)
 		metrics[metric.Id] = &MetricWithData{
 			Metric: metric,
 			Data:   make([]*MetricData, 0),
-			parser: parser,
 		}
 
 		if _, in := devices[device.Id]; !in {
@@ -248,11 +245,6 @@ func (db *Database) QueryMetricsData(filter *Filter, timerange backend.TimeRange
 			return nil, err
 		}
 		mwd := metrics[d.MetricId]
-		val, err := mwd.parser(d.Value)
-		if err != nil {
-			continue
-		}
-		d.NumValue = val
 		mwd.Data = append(mwd.Data, &d)
 	}
 
