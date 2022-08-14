@@ -2,7 +2,7 @@ $scriptpath = $MyInvocation.MyCommand.Path
 $dir = Split-Path $scriptpath
 Push-Location $dir/..
 
-Copy-Item -r ./dist hathoute-modbusrtu-datasource
+Copy-Item -r ./dist hathoute-modbus-datasource
 
 $version = Read-Host -Prompt "Please provide the release version"
 
