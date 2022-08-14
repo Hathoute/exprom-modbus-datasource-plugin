@@ -1,6 +1,6 @@
 {
   "name": "exprom-modbus-rtu-datasource",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "",
   "scripts": {
     "build": "grafana-toolkit plugin:build",
