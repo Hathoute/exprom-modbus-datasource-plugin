@@ -8,7 +8,10 @@ export interface MyQuery extends DataQuery {
 
 export const defaultQuery: Partial<MyQuery> = {
   entity: "Devices",
-  parameters: {},
+  parameters: {
+    devices: "-1",
+    metrics: "-1",
+  },
   withStreaming: false,
 };
 
