@@ -78,7 +78,10 @@ func TestParser(t *testing.T) {
 			parse := parser.GetBytesToDoubleParser(stc.format, stc.order)
 			cp := make([]byte, len(bytes))
 			copy(cp, bytes)
-			val := parse(cp)
+			val, err := parse(cp)
+			if err != nil {
+				t.Errorf("Error for test %d-%d: %s", i, j, err.Error())
+			}
 			if !isValid(val, stc.expectedValue) {
 				t.Errorf("Value mismatch for test %d-%d: Expected %f, got %f", i, j, stc.expectedValue, val)
 			}
